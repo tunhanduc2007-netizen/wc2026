@@ -1,4 +1,4 @@
-export const API_BASE = 'http://localhost:3001/api';
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
 // Failsafe Mock Data in case server is not running
 export const MOCK_TEAMS = [
@@ -224,8 +224,8 @@ export async function fetchAPI(endpoint: string, options?: RequestInit) {
       };
     }
     if (endpoint === '/bracket/simulate') {
-      // Return simulated brackets probabilities
-      return MOCK_TEAMS.map((t, idx) => ({
+      // Return simulated brackets probabilities and a sample bracket structure
+      const probabilities = MOCK_TEAMS.map((t, idx) => ({
         id: t.id,
         name: t.name,
         code: t.code,
@@ -239,6 +239,42 @@ export async function fetchAPI(endpoint: string, options?: RequestInit) {
           winner: Math.max(1, 18 - idx * 5)
         }
       })).sort((a, b) => b.probabilities.winner - a.probabilities.winner);
+
+      return {
+        probabilities,
+        sampleBracket: {
+          r16: [
+            { t1: 'Hà Lan', t2: 'Mỹ', s1: 3, s2: 1, flag1: 'https://flagcdn.com/w320/nl.png', flag2: 'https://flagcdn.com/w320/us.png' },
+            { t1: 'Argentina', t2: 'Úc', s1: 2, s2: 1, flag1: 'https://flagcdn.com/w320/ar.png', flag2: 'https://flagcdn.com/w320/au.png' },
+            { t1: 'Nhật Bản', t2: 'Croatia', s1: 1, s2: 1, pen: '1-3', flag1: 'https://flagcdn.com/w320/jp.png', flag2: 'https://flagcdn.com/w320/hr.png' },
+            { t1: 'Brazil', t2: 'Hàn Quốc', s1: 4, s2: 1, flag1: 'https://flagcdn.com/w320/br.png', flag2: 'https://flagcdn.com/w320/kr.png' },
+            { t1: 'Anh', t2: 'Senegal', s1: 3, s2: 0, flag1: 'https://flagcdn.com/w320/gb-eng.png', flag2: 'https://flagcdn.com/w320/sn.png' },
+            { t1: 'Pháp', t2: 'Ba Lan', s1: 3, s2: 1, flag1: 'https://flagcdn.com/w320/fr.png', flag2: 'https://flagcdn.com/w320/pl.png' },
+            { t1: 'Maroc', t2: 'Tây Ban Nha', s1: 0, s2: 0, pen: '3-0', flag1: 'https://flagcdn.com/w320/ma.png', flag2: 'https://flagcdn.com/w320/es.png' },
+            { t1: 'Bồ Đào Nha', t2: 'Thụy Sĩ', s1: 6, s2: 1, flag1: 'https://flagcdn.com/w320/pt.png', flag2: 'https://flagcdn.com/w320/ch.png' }
+          ],
+          qf: [
+            { t1: 'Hà Lan', t2: 'Argentina', s1: 2, s2: 2, pen: '3-4', flag1: 'https://flagcdn.com/w320/nl.png', flag2: 'https://flagcdn.com/w320/ar.png' },
+            { t1: 'Croatia', t2: 'Brazil', s1: 1, s2: 1, pen: '4-2', flag1: 'https://flagcdn.com/w320/hr.png', flag2: 'https://flagcdn.com/w320/br.png' },
+            { t1: 'Anh', t2: 'Pháp', s1: 1, s2: 2, flag1: 'https://flagcdn.com/w320/gb-eng.png', flag2: 'https://flagcdn.com/w320/fr.png' },
+            { t1: 'Maroc', t2: 'Bồ Đào Nha', s1: 1, s2: 0, flag1: 'https://flagcdn.com/w320/ma.png', flag2: 'https://flagcdn.com/w320/pt.png' }
+          ],
+          sf: [
+            { t1: 'Argentina', t2: 'Croatia', s1: 3, s2: 0, flag1: 'https://flagcdn.com/w320/ar.png', flag2: 'https://flagcdn.com/w320/hr.png' },
+            { t1: 'Pháp', t2: 'Maroc', s1: 2, s2: 0, flag1: 'https://flagcdn.com/w320/fr.png', flag2: 'https://flagcdn.com/w320/ma.png' }
+          ],
+          final: {
+            t1: 'Argentina',
+            t2: 'Pháp',
+            s1: 3,
+            s2: 3,
+            pen: '4-2',
+            winner: 'Argentina',
+            flag1: 'https://flagcdn.com/w320/ar.png',
+            flag2: 'https://flagcdn.com/w320/fr.png'
+          }
+        }
+      };
     }
     
     throw error;
