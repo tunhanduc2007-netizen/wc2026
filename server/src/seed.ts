@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { generatePrediction } from './predictor';
+import { randomUUID } from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -705,47 +706,54 @@ async function main() {
   await prisma.h2HRecord.deleteMany();
   await prisma.team.deleteMany();
 
-  console.log('Seeding Teams (48 countries, Groups A-L)...');
+  console.log('Preparing Teams data...');
+  const teamsToInsert: any[] = [];
   const teamsMap: { [code: string]: any } = {};
 
   for (const t of TEAMS_DATA) {
-    const created = await prisma.team.create({
-      data: {
-        name: t.name,
-        code: t.code,
-        flagUrl: `https://flagcdn.com/w320/${t.flag}.png`,
-        group: t.group,
-        fifaRanking: t.rank,
-        eloRating: t.elo,
-        squadValueEur: t.val,
-        attackRating: t.att,
-        defenseRating: t.def,
-        midfieldRating: t.mid
-      }
-    });
-    teamsMap[t.code] = created;
+    const id = randomUUID();
+    const teamData = {
+      id,
+      name: t.name,
+      code: t.code,
+      flagUrl: `https://flagcdn.com/w320/${t.flag}.png`,
+      group: t.group,
+      fifaRanking: t.rank,
+      eloRating: t.elo,
+      squadValueEur: t.val,
+      attackRating: t.att,
+      defenseRating: t.def,
+      midfieldRating: t.mid
+    };
+    teamsToInsert.push(teamData);
+    teamsMap[t.code] = teamData;
   }
 
-  console.log('Seeding Players...');
+  console.log('Preparing Players data...');
+  const playersToInsert: any[] = [];
+  const teamPlayersMap: { [teamId: string]: any[] } = {};
+
   for (const code of Object.keys(teamsMap)) {
     const team = teamsMap[code];
     const playersList = PLAYERS_DATA[code] || [];
+    teamPlayersMap[team.id] = [];
     
     // Add custom stars
     for (const p of playersList) {
-      await prisma.player.create({
-        data: {
-          name: p.name,
-          position: p.pos,
-          teamId: team.id,
-          marketValueEur: p.val,
-          status: p.status,
-          injuryDetails: p.details || null,
-          goals: p.goals || 0,
-          assists: p.assists || 0,
-          rating: p.rating || 6.5
-        }
-      });
+      const player = {
+        id: randomUUID(),
+        name: p.name,
+        position: p.pos,
+        teamId: team.id,
+        marketValueEur: p.val,
+        status: p.status,
+        injuryDetails: p.details || null,
+        goals: p.goals || 0,
+        assists: p.assists || 0,
+        rating: p.rating || 6.5
+      };
+      playersToInsert.push(player);
+      teamPlayersMap[team.id].push(player);
     }
 
     // Auto-generate remaining players to complete roster
@@ -754,23 +762,23 @@ async function main() {
     for (let i = currentCount; i < 11; i++) {
       const pos = positions[i % positions.length];
       const name = pos === 'GK' ? `Thủ môn ${team.name}` : `Cầu thủ ${team.name} ${i + 1}`;
-      
-      await prisma.player.create({
-        data: {
-          name,
-          position: pos,
-          teamId: team.id,
-          marketValueEur: Math.round((team.squadValueEur / 12) * 10) / 10 || 4.5,
-          status: 'FIT',
-          goals: 0,
-          assists: 0,
-          rating: Math.round((6.0 + Math.random() * 1.5) * 10) / 10
-        }
-      });
+      const player = {
+        id: randomUUID(),
+        name,
+        position: pos,
+        teamId: team.id,
+        marketValueEur: Math.round((team.squadValueEur / 12) * 10) / 10 || 4.5,
+        status: 'FIT',
+        goals: 0,
+        assists: 0,
+        rating: Math.round((6.0 + Math.random() * 1.5) * 10) / 10
+      };
+      playersToInsert.push(player);
+      teamPlayersMap[team.id].push(player);
     }
   }
 
-  console.log('Seeding H2H Records...');
+  console.log('Preparing H2H Records...');
   const majorFixtures = [
     { t1: 'ARG', t2: 'ALG', s1: 1, s2: 1, date: new Date('2002-06-12'), comp: 'World Cup' },
     { t1: 'BRA', t2: 'MAR', s1: 3, s2: 0, date: new Date('1998-06-16'), comp: 'World Cup' },
@@ -778,24 +786,35 @@ async function main() {
     { t1: 'FRA', t2: 'IRQ', s1: 2, s2: 2, date: new Date('2018-03-23'), comp: 'Giao hữu' }
   ];
 
+  const h2hToInsert: any[] = [];
+  const h2hRecordsMap: { [key: string]: any[] } = {};
+
   for (const f of majorFixtures) {
     const team1 = teamsMap[f.t1];
     const team2 = teamsMap[f.t2];
     if (team1 && team2) {
-      await prisma.h2HRecord.create({
-        data: {
-          homeTeamId: team1.id,
-          awayTeamId: team2.id,
-          homeScore: f.s1,
-          awayScore: f.s2,
-          date: f.date,
-          competition: f.comp
-        }
-      });
+      const record = {
+        id: randomUUID(),
+        homeTeamId: team1.id,
+        awayTeamId: team2.id,
+        homeScore: f.s1,
+        awayScore: f.s2,
+        date: f.date,
+        competition: f.comp
+      };
+      h2hToInsert.push(record);
+      
+      const key1 = `${team1.id}-${team2.id}`;
+      const key2 = `${team2.id}-${team1.id}`;
+      if (!h2hRecordsMap[key1]) h2hRecordsMap[key1] = [];
+      if (!h2hRecordsMap[key2]) h2hRecordsMap[key2] = [];
+      
+      h2hRecordsMap[key1].push(record);
+      h2hRecordsMap[key2].push(record);
     }
   }
 
-  console.log('Seeding World Cup 2026 Match Schedule (June 11-17, 2026)...');
+  console.log('Preparing Match Schedule and predictions...');
   const scheduleData = [
     // June 11, 2026 (Completed)
     { h: 'MEX', a: 'RSA', date: '2026-06-11T12:00:00Z', stage: 'GROUP', grp: 'A', status: 'FINISHED', hs: 2, as: 0, min: 90 },
@@ -835,7 +854,6 @@ async function main() {
     { h: 'UZB', a: 'COL', date: '2026-06-17T21:00:00Z', stage: 'GROUP', grp: 'K', status: 'SCHEDULED' }
   ];
 
-  // Generate Matchday 2 and Matchday 3 matches dynamically
   const grps = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
   const grpTeams: { [g: string]: string[] } = {};
   for (const t of TEAMS_DATA) {
@@ -850,7 +868,6 @@ async function main() {
     const dayOffset = Math.floor(idx / 2); // 0 to 5 days after June 18
     const dateStr = `2026-06-${18 + dayOffset}`;
     
-    // T0 vs T2
     scheduleData.push({
       h: teams[0],
       a: teams[2],
@@ -859,7 +876,6 @@ async function main() {
       grp: g,
       status: 'SCHEDULED'
     });
-    // T1 vs T3
     scheduleData.push({
       h: teams[1],
       a: teams[3],
@@ -877,7 +893,6 @@ async function main() {
     const dayOffset = Math.floor(idx / 2); // 0 to 5 days after June 24
     const dateStr = `2026-06-${24 + dayOffset}`;
     
-    // T3 vs T0
     scheduleData.push({
       h: teams[3],
       a: teams[0],
@@ -886,7 +901,6 @@ async function main() {
       grp: g,
       status: 'SCHEDULED'
     });
-    // T1 vs T2
     scheduleData.push({
       h: teams[1],
       a: teams[2],
@@ -897,6 +911,8 @@ async function main() {
     });
   });
 
+  const matchesToInsert: any[] = [];
+  const predictionsToInsert: any[] = [];
 
   for (const s of scheduleData) {
     const homeTeam = teamsMap[s.h];
@@ -908,7 +924,7 @@ async function main() {
     if (s.status === 'LIVE' || s.status === 'FINISHED') {
       const hs = s.hs ?? 0;
       const as = s.as ?? 0;
-      const possessionHome = 45 + Math.floor(Math.random() * 11); // 45% - 55%
+      const possessionHome = 45 + Math.floor(Math.random() * 11);
       liveStats = JSON.stringify({
         possession: [possessionHome, 100 - possessionHome],
         shots: [hs + 5 + Math.floor(Math.random() * 5), as + 3 + Math.floor(Math.random() * 4)],
@@ -924,7 +940,6 @@ async function main() {
       tickerEvents.push({ min: 18 + Math.floor(Math.random() * 10), type: 'YELLOW', team: 'home', player: 'Hậu vệ ' + homeTeam.code });
       tickerEvents.push({ min: 32 + Math.floor(Math.random() * 10), type: 'YELLOW', team: 'away', player: 'Hậu vệ ' + awayTeam.code });
 
-      // Generate goal events for home team
       for (let i = 0; i < hs; i++) {
         const min = Math.min(89, Math.floor(10 + (i * 75) / hs + Math.random() * 10));
         tickerEvents.push({
@@ -935,7 +950,6 @@ async function main() {
         });
       }
 
-      // Generate goal events for away team
       for (let i = 0; i < as; i++) {
         const min = Math.min(89, Math.floor(15 + (i * 75) / as + Math.random() * 10));
         tickerEvents.push({
@@ -946,10 +960,8 @@ async function main() {
         });
       }
 
-      // Sort ticker by minute
       tickerEvents.sort((a, b) => a.min - b.min);
 
-      // Re-calculate details of goals in chronological order
       let currentHome = 0;
       let currentAway = 0;
       tickerEvents.forEach(evt => {
@@ -967,33 +979,27 @@ async function main() {
       liveTicker = JSON.stringify(tickerEvents);
     }
 
-    const match = await prisma.match.create({
-      data: {
-        homeTeamId: homeTeam.id,
-        awayTeamId: awayTeam.id,
-        stage: s.stage,
-        groupName: s.grp,
-        date: new Date(s.date),
-        status: s.status,
-        homeScore: s.hs ?? 0,
-        awayScore: s.as ?? 0,
-        minute: s.min ?? 0,
-        liveStats,
-        liveTicker
-      }
-    });
+    const matchId = randomUUID();
+    const match = {
+      id: matchId,
+      homeTeamId: homeTeam.id,
+      awayTeamId: awayTeam.id,
+      stage: s.stage,
+      groupName: s.grp || null,
+      date: new Date(s.date),
+      status: s.status,
+      homeScore: s.hs ?? 0,
+      awayScore: s.as ?? 0,
+      minute: s.min ?? 0,
+      liveStats,
+      liveTicker
+    };
+    matchesToInsert.push(match);
 
-    const homePlayers = await prisma.player.findMany({ where: { teamId: homeTeam.id } });
-    const awayPlayers = await prisma.player.findMany({ where: { teamId: awayTeam.id } });
-    const h2h = await prisma.h2HRecord.findMany({
-      where: {
-        OR: [
-          { homeTeamId: homeTeam.id, awayTeamId: awayTeam.id },
-          { homeTeamId: awayTeam.id, awayTeamId: homeTeam.id }
-        ]
-      }
-    });
+    const homePlayers = teamPlayersMap[homeTeam.id] || [];
+    const awayPlayers = teamPlayersMap[awayTeam.id] || [];
     
+    const h2h = h2hRecordsMap[`${homeTeam.id}-${awayTeam.id}`] || [];
     const h2hMapped = h2h.map(record => ({
       homeScore: record.homeScore,
       awayScore: record.awayScore,
@@ -1028,27 +1034,42 @@ async function main() {
       h2hMapped
     );
 
-    await prisma.prediction.create({
-      data: {
-        matchId: match.id,
-        homeWinProb: pred.homeWinProb,
-        drawProb: pred.drawProb,
-        awayWinProb: pred.awayWinProb,
-        expectedHomeGoals: pred.expectedHomeGoals,
-        expectedAwayGoals: pred.expectedAwayGoals,
-        predictedHomeScore: pred.predictedHomeScore,
-        predictedAwayScore: pred.predictedAwayScore,
-        secondaryHomeScore: pred.secondaryHomeScore,
-        secondaryAwayScore: pred.secondaryAwayScore,
-        scoreProbabilities: JSON.stringify(pred.scoreProbabilities),
-        bettingTips: JSON.stringify(pred.bettingTips),
-        confidenceScore: pred.confidenceScore,
-        riskLevel: pred.riskLevel
-      }
+    predictionsToInsert.push({
+      id: randomUUID(),
+      matchId: match.id,
+      homeWinProb: pred.homeWinProb,
+      drawProb: pred.drawProb,
+      awayWinProb: pred.awayWinProb,
+      expectedHomeGoals: pred.expectedHomeGoals,
+      expectedAwayGoals: pred.expectedAwayGoals,
+      predictedHomeScore: pred.predictedHomeScore,
+      predictedAwayScore: pred.predictedAwayScore,
+      secondaryHomeScore: pred.secondaryHomeScore,
+      secondaryAwayScore: pred.secondaryAwayScore,
+      scoreProbabilities: JSON.stringify(pred.scoreProbabilities),
+      bettingTips: JSON.stringify(pred.bettingTips),
+      confidenceScore: pred.confidenceScore,
+      riskLevel: pred.riskLevel
     });
   }
 
-  console.log('FIFA World Cup 2026 Seeding Complete! Official 48 teams, player rosters, and math predictions successfully loaded.');
+  console.log(`Writing data to Supabase database (bulk insertion)...`);
+  console.log(`- Inserting ${teamsToInsert.length} teams...`);
+  await prisma.team.createMany({ data: teamsToInsert });
+
+  console.log(`- Inserting ${playersToInsert.length} players...`);
+  await prisma.player.createMany({ data: playersToInsert });
+
+  console.log(`- Inserting ${h2hToInsert.length} H2H records...`);
+  await prisma.h2HRecord.createMany({ data: h2hToInsert });
+
+  console.log(`- Inserting ${matchesToInsert.length} matches...`);
+  await prisma.match.createMany({ data: matchesToInsert });
+
+  console.log(`- Inserting ${predictionsToInsert.length} predictions...`);
+  await prisma.prediction.createMany({ data: predictionsToInsert });
+
+  console.log('FIFA World Cup 2026 Seeding Complete! Official 48 teams, player rosters, and math predictions successfully loaded in bulk.');
 }
 
 main()
