@@ -1,0 +1,104 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Team {
+  id              String   @id @default(uuid())
+  name            String   @unique
+  code            String   @unique // e.g. BRA, FRA, ARG
+  flagUrl         String
+  group           String   // A, B, C, D, E, F, G, H
+  fifaRanking     Int
+  eloRating       Float
+  squadValueEur   Float    // in millions, e.g. 850.5
+  attackRating    Float    // 0 to 100
+  defenseRating   Float    // 0 to 100
+  midfieldRating  Float    // 0 to 100
+  
+  players         Player[]
+  homeMatches     Match[]  @relation("HomeTeam")
+  awayMatches     Match[]  @relation("AwayTeam")
+  
+  h2hAsHome       H2HRecord[] @relation("H2HHome")
+  h2hAsAway       H2HRecord[] @relation("H2HAway")
+}
+
+model Player {
+  id             String   @id @default(uuid())
+  name           String
+  position       String   // GK, DEF, MID, FWD
+  teamId         String
+  team           Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  marketValueEur Float    // in millions
+  status         String   // FIT, INJURED, SUSPENDED
+  injuryDetails  String?
+  returnDate     String?
+  goals          Int      @default(0)
+  assists        Int      @default(0)
+  rating         Float    @default(6.5)
+}
+
+model Match {
+  id              String       @id @default(uuid())
+  homeTeamId      String
+  awayTeamId      String
+  homeTeam        Team         @relation("HomeTeam", fields: [homeTeamId], references: [id], onDelete: Cascade)
+  awayTeam        Team         @relation("AwayTeam", fields: [awayTeamId], references: [id], onDelete: Cascade)
+  
+  stage           String       // GROUP, ROUND_16, QUARTER, SEMI, THIRD_PLACE, FINAL
+  groupName       String?      // A, B, etc.
+  date            DateTime
+  status          String       // SCHEDULED, LIVE, FINISHED
+  
+  homeScore       Int          @default(0)
+  awayScore       Int          @default(0)
+  minute          Int          @default(0)
+  
+  liveStats       String?      // JSON string for live stats: possession, shots, etc.
+  liveTicker      String?      // JSON string for timeline events
+  
+  prediction      Prediction?
+}
+
+model Prediction {
+  id                    String   @id @default(uuid())
+  matchId               String   @unique
+  match                 Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  
+  homeWinProb           Float
+  drawProb              Float
+  awayWinProb           Float
+  
+  expectedHomeGoals     Float
+  expectedAwayGoals     Float
+  
+  predictedHomeScore    Int
+  predictedAwayScore    Int
+  secondaryHomeScore    Int
+  secondaryAwayScore    Int
+  
+  scoreProbabilities    String   // JSON string of score probs, e.g. {"2-0": 21, "1-1": 15}
+  bettingTips           String   // JSON string of recommendations
+  
+  confidenceScore       Float
+  riskLevel             String   // LOW, MEDIUM, HIGH
+  createdAt             DateTime @default(now())
+}
+
+model H2HRecord {
+  id             String   @id @default(uuid())
+  homeTeamId     String
+  awayTeamId     String
+  homeTeam       Team     @relation("H2HHome", fields: [homeTeamId], references: [id], onDelete: Cascade)
+  awayTeam       Team     @relation("H2HAway", fields: [awayTeamId], references: [id], onDelete: Cascade)
+  
+  homeScore      Int
+  awayScore      Int
+  date           DateTime
+  competition    String
+}

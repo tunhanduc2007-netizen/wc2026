@@ -1,0 +1,14 @@
+{
+  "name": "worldcup-prediction-platform",
+  "version": "1.0.0",
+  "description": "FIFA World Cup AI prediction and analytics web platform",
+  "scripts": {
+    "install:all": "npm install && npm install --prefix server && npm install --prefix client",
+    "db:init": "npm run prisma:generate --prefix server && npm run prisma:migrate --prefix server && npm run db:seed --prefix server",
+    "start": "concurrently --kill-others \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "dev": "concurrently --kill-others \"npm run dev --prefix server\" \"npm run dev --prefix client\""
+  },
+  "dependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
