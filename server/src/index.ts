@@ -26,7 +26,7 @@ function getCurrentSimulatedTime(): Date {
   return simulated;
 }
 
-function getDynamicMatchState(match: any, currentTime: Date): any {
+function getDynamicMatchState(match: any, currentTime: Date, playersByTeam: { [teamId: string]: any[] } = {}): any {
   if (!match) return null;
   const kickoff = new Date(match.date);
   
@@ -74,6 +74,23 @@ function getDynamicMatchState(match: any, currentTime: Date): any {
     xG: [Math.round((homeScore * 0.5 + currentMinute * 0.01) * 100) / 100, Math.round((awayScore * 0.5 + currentMinute * 0.008) * 100) / 100]
   });
 
+  // Fetch real squad players if available
+  const homePlayers = playersByTeam[match.homeTeamId] || [];
+  const awayPlayers = playersByTeam[match.awayTeamId] || [];
+
+  const getDeterministicPlayer = (players: any[], seedValue: number, positionPreference?: string): string => {
+    if (!players || players.length === 0) return 'Cầu thủ';
+    let pool = players;
+    if (positionPreference) {
+      const preferredPool = players.filter(p => p.position === positionPreference && p.status === 'FIT');
+      if (preferredPool.length > 0) {
+        pool = preferredPool;
+      }
+    }
+    const index = Math.abs(seedValue) % pool.length;
+    return pool[index].name;
+  };
+
   // Generate ticker events
   const homeGoalMinutes: number[] = [];
   const awayGoalMinutes: number[] = [];
@@ -85,14 +102,34 @@ function getDynamicMatchState(match: any, currentTime: Date): any {
   }
 
   const tickerEvents: any[] = [];
-  tickerEvents.push({ min: 15 + (hash % 10), type: 'YELLOW', team: 'home', player: 'Hậu vệ ' + match.homeTeam.code });
-  tickerEvents.push({ min: 30 + (hash % 10), type: 'YELLOW', team: 'away', player: 'Hậu vệ ' + match.awayTeam.code });
+  tickerEvents.push({ 
+    min: 15 + (hash % 10), 
+    type: 'YELLOW', 
+    team: 'home', 
+    player: getDeterministicPlayer(homePlayers, hash + 15, 'DEF') 
+  });
+  tickerEvents.push({ 
+    min: 30 + (hash % 10), 
+    type: 'YELLOW', 
+    team: 'away', 
+    player: getDeterministicPlayer(awayPlayers, hash + 30, 'DEF') 
+  });
 
   homeGoalMinutes.forEach(gm => {
-    tickerEvents.push({ min: gm, type: 'GOAL', team: 'home', player: 'Cầu thủ ' + match.homeTeam.code });
+    tickerEvents.push({ 
+      min: gm, 
+      type: 'GOAL', 
+      team: 'home', 
+      player: getDeterministicPlayer(homePlayers, hash + gm + 7, 'FWD') 
+    });
   });
   awayGoalMinutes.forEach(gm => {
-    tickerEvents.push({ min: gm, type: 'GOAL', team: 'away', player: 'Cầu thủ ' + match.awayTeam.code });
+    tickerEvents.push({ 
+      min: gm, 
+      type: 'GOAL', 
+      team: 'away', 
+      player: getDeterministicPlayer(awayPlayers, hash + gm + 9, 'FWD') 
+    });
   });
 
   tickerEvents.sort((a, b) => a.min - b.min);
@@ -142,7 +179,16 @@ app.get('/api/matches', async (req, res) => {
       orderBy: { date: 'asc' }
     });
     const now = getCurrentSimulatedTime();
-    const dynamicMatches = matches.map(m => getDynamicMatchState(m, now));
+
+    // Fetch all players and group them to avoid N+1 query overhead in simulation loop
+    const allPlayers = await prisma.player.findMany();
+    const playersByTeam: { [teamId: string]: any[] } = {};
+    allPlayers.forEach(p => {
+      if (!playersByTeam[p.teamId]) playersByTeam[p.teamId] = [];
+      playersByTeam[p.teamId].push(p);
+    });
+
+    const dynamicMatches = matches.map(m => getDynamicMatchState(m, now, playersByTeam));
     res.json(dynamicMatches);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch matches' });
@@ -167,11 +213,17 @@ app.get('/api/matches/:id', async (req, res) => {
     }
 
     const now = getCurrentSimulatedTime();
-    const dynamicMatch = getDynamicMatchState(match, now);
 
     // Fetch roster (squads)
-    const homePlayers = await prisma.player.findMany({ where: { teamId: dynamicMatch.homeTeamId } });
-    const awayPlayers = await prisma.player.findMany({ where: { teamId: dynamicMatch.awayTeamId } });
+    const homePlayers = await prisma.player.findMany({ where: { teamId: match.homeTeamId } });
+    const awayPlayers = await prisma.player.findMany({ where: { teamId: match.awayTeamId } });
+
+    const playersByTeam: { [teamId: string]: any[] } = {
+      [match.homeTeamId]: homePlayers,
+      [match.awayTeamId]: awayPlayers
+    };
+
+    const dynamicMatch = getDynamicMatchState(match, now, playersByTeam);
 
     // Fetch H2H
     const h2h = await prisma.h2HRecord.findMany({
@@ -205,9 +257,17 @@ app.get('/api/matches/:id', async (req, res) => {
       take: 5
     });
 
+    // Fetch all players for form matches
+    const allPlayers = await prisma.player.findMany();
+    const globalPlayersMap: { [teamId: string]: any[] } = {};
+    allPlayers.forEach(p => {
+      if (!globalPlayersMap[p.teamId]) globalPlayersMap[p.teamId] = [];
+      globalPlayersMap[p.teamId].push(p);
+    });
+
     // Apply dynamic match state to recent matches to ensure accurate history
-    const dynamicHomeRecent = homeRecentMatches.map(m => getDynamicMatchState(m, now));
-    const dynamicAwayRecent = awayRecentMatches.map(m => getDynamicMatchState(m, now));
+    const dynamicHomeRecent = homeRecentMatches.map(m => getDynamicMatchState(m, now, globalPlayersMap));
+    const dynamicAwayRecent = awayRecentMatches.map(m => getDynamicMatchState(m, now, globalPlayersMap));
 
     res.json({
       match: dynamicMatch,
@@ -228,6 +288,9 @@ app.get('/api/matches/:id', async (req, res) => {
 app.get('/api/teams', async (req, res) => {
   try {
     const teams = await prisma.team.findMany({
+      include: {
+        players: true
+      },
       orderBy: { eloRating: 'desc' }
     });
     res.json(teams);
@@ -264,7 +327,16 @@ app.get('/api/teams/:id', async (req, res) => {
     });
 
     const now = getCurrentSimulatedTime();
-    const dynamicMatches = matches.map(m => getDynamicMatchState(m, now));
+
+    // Fetch all players and group them to avoid N+1 query overhead in simulation loop
+    const allPlayers = await prisma.player.findMany();
+    const playersByTeam: { [teamId: string]: any[] } = {};
+    allPlayers.forEach(p => {
+      if (!playersByTeam[p.teamId]) playersByTeam[p.teamId] = [];
+      playersByTeam[p.teamId].push(p);
+    });
+
+    const dynamicMatches = matches.map(m => getDynamicMatchState(m, now, playersByTeam));
 
     res.json({ team, matches: dynamicMatches });
   } catch (error) {
@@ -284,8 +356,17 @@ app.get('/api/betting-insights', async (req, res) => {
     });
 
     const now = getCurrentSimulatedTime();
+
+    // Fetch all players and group them to avoid N+1 query overhead in simulation loop
+    const allPlayers = await prisma.player.findMany();
+    const playersByTeam: { [teamId: string]: any[] } = {};
+    allPlayers.forEach(p => {
+      if (!playersByTeam[p.teamId]) playersByTeam[p.teamId] = [];
+      playersByTeam[p.teamId].push(p);
+    });
+
     const dynamicPredictions = predictions.map(pred => {
-      const dynamicMatch = getDynamicMatchState(pred.match, now);
+      const dynamicMatch = getDynamicMatchState(pred.match, now, playersByTeam);
       return {
         ...pred,
         match: dynamicMatch
@@ -454,7 +535,105 @@ app.post('/api/bracket/simulate', async (req, res) => {
       }
     })).sort((a, b) => b.probabilities.winner - a.probabilities.winner);
 
-    res.json(simulationResult);
+    // Run one single representative simulation run for visual bracket tree display
+    const runSingleSampleBracket = () => {
+      const r16Teams: any[] = [];
+      r32Matchups.forEach(([t1, t2]) => {
+        const winner = runMatchSim(t1, t2);
+        r16Teams.push(winner);
+      });
+
+      const r16Matches: any[] = [];
+      const qfTeams: any[] = [];
+      for (let j = 0; j < 16; j += 2) {
+        const t1 = r16Teams[j];
+        const t2 = r16Teams[j+1];
+        const winner = runMatchSim(t1, t2);
+        qfTeams.push(winner);
+        const s1 = 1 + Math.floor(Math.random() * 3);
+        const s2 = Math.floor(Math.random() * s1);
+        r16Matches.push({
+          t1: t1.name,
+          t2: t2.name,
+          s1: t1.id === winner.id ? s1 : s2,
+          s2: t2.id === winner.id ? s1 : s2,
+          flag1: t1.flagUrl,
+          flag2: t2.flagUrl
+        });
+      }
+
+      const qfMatches: any[] = [];
+      const sfTeams: any[] = [];
+      for (let j = 0; j < 8; j += 2) {
+        const t1 = qfTeams[j];
+        const t2 = qfTeams[j+1];
+        const winner = runMatchSim(t1, t2);
+        sfTeams.push(winner);
+        const s1 = 1 + Math.floor(Math.random() * 2);
+        const s2 = Math.floor(Math.random() * s1);
+        qfMatches.push({
+          t1: t1.name,
+          t2: t2.name,
+          s1: t1.id === winner.id ? s1 : s2,
+          s2: t2.id === winner.id ? s1 : s2,
+          flag1: t1.flagUrl,
+          flag2: t2.flagUrl
+        });
+      }
+
+      const sfMatches: any[] = [];
+      const fTeams: any[] = [];
+      for (let j = 0; j < 4; j += 2) {
+        const t1 = sfTeams[j];
+        const t2 = sfTeams[j+1];
+        const winner = runMatchSim(t1, t2);
+        fTeams.push(winner);
+        const s1 = 1 + Math.floor(Math.random() * 2);
+        const s2 = Math.floor(Math.random() * s1);
+        sfMatches.push({
+          t1: t1.name,
+          t2: t2.name,
+          s1: t1.id === winner.id ? s1 : s2,
+          s2: t2.id === winner.id ? s1 : s2,
+          flag1: t1.flagUrl,
+          flag2: t2.flagUrl
+        });
+      }
+
+      const t1 = fTeams[0];
+      const t2 = fTeams[1];
+      const winner = runMatchSim(t1, t2);
+      const s1 = 1 + Math.floor(Math.random() * 2);
+      const s2 = Math.floor(Math.random() * s1);
+      
+      // Check for penalties
+      let pen = undefined;
+      if (s1 === s2) {
+        const p1 = 3 + Math.floor(Math.random() * 3);
+        const p2 = Math.floor(Math.random() * p1);
+        pen = `${p1}-${p2}`;
+      }
+
+      const finalMatch = {
+        t1: t1.name,
+        t2: t2.name,
+        s1: t1.id === winner.id ? s1 : s2,
+        s2: t2.id === winner.id ? s1 : s2,
+        flag1: t1.flagUrl,
+        flag2: t2.flagUrl,
+        winner: winner.name,
+        pen
+      };
+
+      return {
+        r16: r16Matches,
+        qf: qfMatches,
+        sf: sfMatches,
+        final: finalMatch
+      };
+    };
+
+    res.json({ probabilities: simulationResult, sampleBracket: runSingleSampleBracket() });
   } catch (error) {
     res.status(500).json({ error: 'Failed to run bracket simulation' });
   }
@@ -472,10 +651,12 @@ app.post('/api/matches/trigger-live', async (req, res) => {
       return res.status(404).json({ error: 'No scheduled matches to start' });
     }
 
+    const now = getCurrentSimulatedTime();
     const updated = await prisma.match.update({
       where: { id: scheduled.id },
       data: {
         status: 'LIVE',
+        date: now, // Set the kickoff date to current simulated time!
         minute: 0,
         homeScore: 0,
         awayScore: 0,

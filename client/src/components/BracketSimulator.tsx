@@ -7,13 +7,15 @@ import { motion } from 'framer-motion';
 
 export default function BracketSimulator() {
   const [simulationData, setSimulationData] = useState<any[]>([]);
+  const [sampleBracket, setSampleBracket] = useState<any>(null);
   const [simulating, setSimulating] = useState(false);
 
   const startSimulation = async () => {
     setSimulating(true);
     try {
       const data = await fetchAPI('/bracket/simulate', { method: 'POST' });
-      setSimulationData(data);
+      setSimulationData(data.probabilities);
+      setSampleBracket(data.sampleBracket);
     } catch (err) {
       console.error(err);
       alert('Không thể chạy mô phỏng. (Vui lòng kiểm tra server ở cổng 3001)');
@@ -71,12 +73,121 @@ export default function BracketSimulator() {
         </button>
       </div>
 
-      {simulationData.length > 0 ? (
-        /* Simulation output probabilities board */
+      {/* Visual Brackets Layout Tree */}
+      <div className="glass-panel p-6 space-y-6 overflow-x-auto">
+        <h4 className="font-bold text-xs uppercase tracking-wider text-white/50 border-b border-white/5 pb-2">
+          {sampleBracket ? 'Sơ đồ nhánh đấu giả lập thực tế từ AI' : 'Mô hình nhánh đấu mẫu (Tham khảo kỳ 2022)'}
+        </h4>
+        
+        <div className="flex justify-between items-center space-x-6 min-w-[900px] py-4">
+          
+          {/* ROUND OF 16 COLUMN */}
+          <div className="flex-1 space-y-4">
+            <span className="text-[10px] uppercase font-bold text-white/30 block mb-2">Vòng 16 đội</span>
+            {(sampleBracket ? sampleBracket.r16 : bracketVisual.r16).slice(0, 4).map((m: any, idx: number) => (
+              <div key={idx} className="bg-white/5 border border-white/5 p-2.5 rounded text-[11px] space-y-1 hover:bg-white/10 transition-colors">
+                <div className="flex justify-between font-medium items-center">
+                  <div className="flex items-center space-x-1.5">
+                    {m.flag1 && <img src={m.flag1} alt="" className="w-4 h-2.5 object-cover rounded-sm" />}
+                    <span>{m.t1}</span>
+                  </div>
+                  <span className="font-bold">{m.s1}</span>
+                </div>
+                <div className="flex justify-between font-medium text-white/60 items-center">
+                  <div className="flex items-center space-x-1.5">
+                    {m.flag2 && <img src={m.flag2} alt="" className="w-4 h-2.5 object-cover rounded-sm" />}
+                    <span>{m.t2}</span>
+                  </div>
+                  <span className="font-bold">{m.s2}</span>
+                </div>
+                {m.pen && <div className="text-[9px] text-brand-gold text-right">Luân lưu: {m.pen}</div>}
+              </div>
+            ))}
+          </div>
+
+          {/* QUARTER FINALS COLUMN */}
+          <div className="flex-1 space-y-8">
+            <span className="text-[10px] uppercase font-bold text-white/30 block mb-2">Tứ kết</span>
+            {(sampleBracket ? sampleBracket.qf : bracketVisual.qf).slice(0, 2).map((m: any, idx: number) => (
+              <div key={idx} className="bg-sky-500/10 border border-sky-500/20 p-2.5 rounded text-[11px] space-y-1 hover:bg-sky-500/20 transition-colors">
+                <div className="flex justify-between font-medium items-center">
+                  <div className="flex items-center space-x-1.5">
+                    {m.flag1 && <img src={m.flag1} alt="" className="w-4 h-2.5 object-cover rounded-sm" />}
+                    <span>{m.t1}</span>
+                  </div>
+                  <span className="font-bold">{m.s1}</span>
+                </div>
+                <div className="flex justify-between font-medium text-white/60 items-center">
+                  <div className="flex items-center space-x-1.5">
+                    {m.flag2 && <img src={m.flag2} alt="" className="w-4 h-2.5 object-cover rounded-sm" />}
+                    <span>{m.t2}</span>
+                  </div>
+                  <span className="font-bold">{m.s2}</span>
+                </div>
+                {m.pen && <div className="text-[9px] text-brand-gold text-right">Luân lưu: {m.pen}</div>}
+              </div>
+            ))}
+          </div>
+
+          {/* SEMI FINALS COLUMN */}
+          <div className="flex-1 space-y-16">
+            <span className="text-[10px] uppercase font-bold text-white/30 block mb-2">Bán kết</span>
+            {(sampleBracket ? sampleBracket.sf : bracketVisual.sf).slice(0, 1).map((m: any, idx: number) => (
+              <div key={idx} className="bg-indigo-500/10 border border-indigo-500/20 p-3 rounded text-[11px] space-y-1 hover:bg-indigo-500/20 transition-colors">
+                <div className="flex justify-between font-medium items-center">
+                  <div className="flex items-center space-x-1.5">
+                    {m.flag1 && <img src={m.flag1} alt="" className="w-4 h-2.5 object-cover rounded-sm" />}
+                    <span>{m.t1}</span>
+                  </div>
+                  <span className="font-bold">{m.s1}</span>
+                </div>
+                <div className="flex justify-between font-medium text-white/60 items-center">
+                  <div className="flex items-center space-x-1.5">
+                    {m.flag2 && <img src={m.flag2} alt="" className="w-4 h-2.5 object-cover rounded-sm" />}
+                    <span>{m.t2}</span>
+                  </div>
+                  <span className="font-bold">{m.s2}</span>
+                </div>
+                {m.pen && <div className="text-[9px] text-brand-gold text-right">Luân lưu: {m.pen}</div>}
+              </div>
+            ))}
+          </div>
+
+          {/* FINAL COLUMN */}
+          <div className="flex-1 flex flex-col items-center justify-center space-y-4">
+            <span className="text-[10px] uppercase font-bold text-brand-gold block text-center mb-2">Chung kết</span>
+            {(() => {
+              const f = sampleBracket ? sampleBracket.final : bracketVisual.final;
+              return (
+                <div className="bg-amber-500/10 border-2 border-brand-gold/30 p-4 rounded-lg text-xs space-y-2 text-center w-full relative overflow-hidden shadow-lg shadow-amber-950/20">
+                  <div className="absolute -right-4 -bottom-4 opacity-10">
+                    <Trophy className="h-16 w-16 text-brand-gold" />
+                  </div>
+                  <div className="font-bold text-brand-gold mb-1">VÔ ĐỊCH</div>
+                  <div className="font-bold flex items-center justify-center space-x-1.5">
+                    {f.flag1 && <img src={f.flag1} alt="" className="w-4 h-2.5 object-cover rounded-sm" />}
+                    <span>{f.t1} ({f.s1})</span>
+                  </div>
+                  <div className="text-white/60 font-semibold flex items-center justify-center space-x-1.5 mt-0.5">
+                    {f.flag2 && <img src={f.flag2} alt="" className="w-4 h-2.5 object-cover rounded-sm" />}
+                    <span>{f.t2} ({f.s2})</span>
+                  </div>
+                  {f.pen && <div className="text-[10px] text-brand-gold mt-1">Luân lưu: {f.pen}</div>}
+                  <div className="text-brand-gold font-extrabold mt-2 text-sm">{f.winner} 🏆</div>
+                </div>
+              );
+            })()}
+          </div>
+
+        </div>
+      </div>
+
+      {/* Simulation output probabilities board */}
+      {simulationData.length > 0 && (
         <div className="glass-panel p-6 space-y-4">
           <div className="flex items-center space-x-2 border-b border-white/5 pb-3">
             <BarChart2 className="h-5 w-5 text-brand-gold" />
-            <h4 className="font-bold text-sm">Tỷ lệ phần trăm đi tiếp qua mô phỏng (%)</h4>
+            <h4 className="font-bold text-sm">Tỷ lệ phần trăm đi tiếp qua 1.000 lượt mô phỏng (%)</h4>
           </div>
 
           <div className="overflow-x-auto">
@@ -123,82 +234,6 @@ export default function BracketSimulator() {
                 ))}
               </tbody>
             </table>
-          </div>
-        </div>
-      ) : (
-        /* Visual Brackets Layout Tree */
-        <div className="glass-panel p-6 space-y-6 overflow-x-auto">
-          <h4 className="font-bold text-xs uppercase tracking-wider text-white/50 border-b border-white/5 pb-2">Mô hình nhánh đấu mẫu (Tham khảo kỳ 2022)</h4>
-          
-          <div className="flex justify-between items-center space-x-6 min-w-[900px] py-4">
-            
-            {/* ROUND OF 16 COLUMN */}
-            <div className="flex-1 space-y-4">
-              <span className="text-[10px] uppercase font-bold text-white/30 block mb-2">Vòng 16 đội</span>
-              {bracketVisual.r16.slice(0, 4).map(m => (
-                <div key={m.id} className="bg-white/5 border border-white/5 p-2 rounded text-[11px] space-y-1">
-                  <div className="flex justify-between font-medium">
-                    <span>{m.t1}</span>
-                    <span className="font-bold">{m.s1}</span>
-                  </div>
-                  <div className="flex justify-between font-medium text-white/60">
-                    <span>{m.t2}</span>
-                    <span className="font-bold">{m.s2}</span>
-                  </div>
-                  {m.pen && <div className="text-[9px] text-brand-gold text-right">L.lưu: {m.pen}</div>}
-                </div>
-              ))}
-            </div>
-
-            {/* QUARTER FINALS COLUMN */}
-            <div className="flex-1 space-y-8">
-              <span className="text-[10px] uppercase font-bold text-white/30 block mb-2">Tứ kết</span>
-              {bracketVisual.qf.slice(0, 2).map(m => (
-                <div key={m.id} className="bg-sky-500/10 border border-sky-500/20 p-2.5 rounded text-[11px] space-y-1">
-                  <div className="flex justify-between font-medium">
-                    <span>{m.t1}</span>
-                    <span className="font-bold">{m.s1}</span>
-                  </div>
-                  <div className="flex justify-between font-medium text-white/60">
-                    <span>{m.t2}</span>
-                    <span className="font-bold">{m.s2}</span>
-                  </div>
-                  {m.pen && <div className="text-[9px] text-brand-gold text-right">L.lưu: {m.pen}</div>}
-                </div>
-              ))}
-            </div>
-
-            {/* SEMI FINALS COLUMN */}
-            <div className="flex-1 space-y-16">
-              <span className="text-[10px] uppercase font-bold text-white/30 block mb-2">Bán kết</span>
-              {bracketVisual.sf.slice(0, 1).map((m, idx) => (
-                <div key={idx} className="bg-indigo-500/10 border border-indigo-500/20 p-3 rounded text-[11px] space-y-1">
-                  <div className="flex justify-between font-medium">
-                    <span>{m.t1}</span>
-                    <span className="font-bold">{m.s1}</span>
-                  </div>
-                  <div className="flex justify-between font-medium text-white/60">
-                    <span>{m.t2}</span>
-                    <span className="font-bold">{m.s2}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* FINAL COLUMN */}
-            <div className="flex-1 flex flex-col items-center justify-center space-y-4">
-              <span className="text-[10px] uppercase font-bold text-brand-gold block text-center mb-2">Chung kết</span>
-              <div className="bg-amber-500/10 border-2 border-brand-gold/30 p-4 rounded-lg text-xs space-y-2 text-center w-full relative overflow-hidden">
-                <div className="absolute -right-4 -bottom-4 opacity-10">
-                  <Trophy className="h-16 w-16 text-brand-gold" />
-                </div>
-                <div className="font-bold text-brand-gold mb-1">VÔ ĐỊCH</div>
-                <div className="font-bold">{bracketVisual.final.t1} ({bracketVisual.final.s1})</div>
-                <div className="text-white/60 font-semibold">{bracketVisual.final.t2} ({bracketVisual.final.s2})</div>
-                <div className="text-[10px] text-brand-gold mt-1">Luân lưu: {bracketVisual.final.pen}</div>
-              </div>
-            </div>
-
           </div>
         </div>
       )}

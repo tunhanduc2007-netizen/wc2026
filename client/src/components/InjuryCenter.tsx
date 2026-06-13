@@ -12,12 +12,7 @@ export default function InjuryCenter() {
     async function loadData() {
       try {
         const data = await fetchAPI('/teams');
-        const detailedTeams = [];
-        for (const t of data) {
-          const detail = await fetchAPI(`/teams/${t.id}`);
-          detailedTeams.push(detail.team);
-        }
-        setTeams(detailedTeams);
+        setTeams(data);
       } catch (err) {
         console.error(err);
       } finally {
